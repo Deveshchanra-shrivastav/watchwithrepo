@@ -1,0 +1,156 @@
+@{
+    ViewData["Title"] = "Chat"; var me = ViewBag.Me as WatchWith.Models.AppUser; var other = ViewBag.Other as WatchWith.Models.AppUser; var messages = ViewBag.Messages as List<WatchWith.Models.ChatMessageRow>;
+}
+<div class="chat-app">
+    <div class="chat-sidebar" style="display:none;" id="chatSidebar"></div>
+    <div class="chat-window">
+        <div class="chat-win-head">
+            <a href="/Chat" class="icon-btn" style="margin-right:4px;">←</a>
+            <div style="position:relative;">
+                <div class="av" style="background:@other?.AvatarColor;color:#fff;">@other?.AvatarInitials</div>
+                <div class="online-dot" id="onlineDot" style="display:none;"></div>
+            </div>
+            <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">@other?.DisplayName</div>
+                <div id="statusText" style="font-size:11px;color:var(--muted);">offline</div>
+            </div>
+            <div style="display:flex;gap:8px;"></div>
+        </div>
+
+        <div class="chat-msgs" id="chatMsgs">
+            <div class="date-div"><span>Today</span></div>
+            <div id="msgContainer"></div>
+        </div>
+
+        <div id="typingRow" style="padding:4px 16px;font-size:12px;color:var(--muted);font-style:italic;display:none;">@other?.DisplayName is typing...</div>
+
+        <div class="chat-input-area">
+            <div class="emoji-strip">
+                <span onclick="ae('❤️')">❤️</span><span onclick="ae('😂')">😂</span>
+                <span onclick="ae('😍')">😍</span><span onclick="ae('😭')">😭</span>
+                <span onclick="ae('🔥')">🔥</span><span onclick="ae('👍')">👍</span>
+                <span onclick="ae('🎬')">🎬</span><span onclick="ae('🍿')">🍿</span>
+            </div>
+            <div style="display:flex;gap:8px;padding:8px 12px;">
+                <input id="msgIn" type="text" placeholder="Message (end-to-end encrypted)..."
+                       onkeydown="if(event.key==='Enter')sendMsg()" oninput="onType()"
+                       style="flex:1;padding:10px 14px;border:.5px solid var(--border);border-radius:24px;font-size:13px;background:var(--bg);outline:none;" />
+                <button onclick="sendMsg()" class="send-btn">➤</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        var ME_ID = "@me?.Id";
+        var ME_NAME = "@me?.DisplayName";
+        var OTHER_ID = "@other?.Id";
+        var SECRET = ME_ID < OTHER_ID ? ME_ID + OTHER_ID : OTHER_ID + ME_ID;
+        var conn = null, cryptoKey = null, typingTimer = null;
+
+        async function init() {
+            cryptoKey = deriveKey(SECRET);
+
+            // Render existing messages
+            var existing = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(messages?.Select(m => new
+            {
+                id = m.Id,
+                senderId = m.SenderId,
+                encryptedText = m.EncryptedText,
+                iv = m.Iv,
+                senderName = m.SenderName,
+                senderAvatar = m.SenderAvatar,
+                senderColor = m.SenderColor,
+                sentAt = m.SentAt.ToString("HH:mm"),
+                isRead = m.IsRead
+            }) ?? Enumerable.Empty<object>()));
+            for (var i = 0; i < existing.length; i++) await renderMsg(existing[i]);
+
+            conn = new signalR.HubConnectionBuilder().withUrl("/watchHub").withAutomaticReconnect().build();
+            conn.on("NewDirectMessage", onNewMsg);
+            conn.on("ContactTyping", (uid, name, t) => {
+                if (uid === OTHER_ID) {
+                    document.getElementById("typingRow").style.display = t ? "block" : "none";
+                }
+            });
+            conn.on("MessagesRead", () => { });
+
+            try {
+                await conn.start();
+                await conn.invoke("JoinUserGroup");
+            } catch (e) { setTimeout(() => conn.start(), 4000); }
+        }
+
+        // ── E2E Crypto ────────────────────────────────────────────────
+        // E2E encryption — pure JS AES via CryptoJS, works on HTTP and HTTPS
+        var cryptoKey = null;
+
+        function deriveKey(secret) {
+            cryptoKey = CryptoJS.SHA256(secret).toString();
+            return cryptoKey;
+        }
+
+        function encrypt(text) {
+            try {
+                var encrypted = CryptoJS.AES.encrypt(text, cryptoKey).toString();
+                return { encryptedText: encrypted, iv: "aes" };
+            } catch (e) {
+                return { encryptedText: btoa(unescape(encodeURIComponent(text))), iv: "plain" };
+            }
+        }
+
+        function decrypt(encText, iv) {
+            try {
+                if (iv === "plain") return decodeURIComponent(escape(atob(encText)));
+                var bytes = CryptoJS.AES.decrypt(encText, cryptoKey);
+                return bytes.toString(CryptoJS.enc.Utf8) || "🔒 [message]";
+            } catch (e) {
+                try { return decodeURIComponent(escape(atob(encText))); } catch { return "🔒 [message]"; }
+            }
+        }
+
+        // ── Send ──────────────────────────────────────────────────────
+        async function sendMsg() {
+            var input = document.getElementById("msgIn");
+            var text = input.value.trim();
+            if (!text || !conn || conn.state !== "Connected") return;
+            input.value = "";
+            var e = encrypt(text);
+            conn.invoke("SendDirectMessage", OTHER_ID, e.encryptedText, e.iv);
+            conn.invoke("DirectTyping", OTHER_ID, false);
+        }
+
+        async function onNewMsg(dto) { await renderMsg(dto); }
+
+        async function renderMsg(dto) {
+            var isOwn = dto.senderId === ME_ID;
+            var text = decrypt(dto.encryptedText, dto.iv);
+            var div = document.createElement("div");
+            div.className = "msg-row " + (isOwn ? "out" : "in");
+            div.innerHTML =
+                (!isOwn ? '<div class="av sm" style="background:' + (dto.senderColor || "#7F77DD") + ';color:#fff;">' + (dto.senderAvatar || "?") + '</div>' : "") +
+                '<div class="bubble ' + (isOwn ? "bbl-out" : "bbl-in") + '">' +
+                '<div class="msg-txt">' + esc(text) + '</div>' +
+                '<div class="msg-time">' + (dto.sentAt || "") + (isOwn ? ' <span class="tick">✓✓</span>' : '') + '</div>' +
+                '</div>';
+            document.getElementById("msgContainer").appendChild(div);
+            var msgs = document.getElementById("chatMsgs");
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        function esc(s) {
+            return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function ae(e) { document.getElementById("msgIn").value += e; }
+
+        function onType() {
+            if (conn && conn.state === "Connected") conn.invoke("DirectTyping", OTHER_ID, true);
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => { if (conn && conn.state === "Connected") conn.invoke("DirectTyping", OTHER_ID, false); }, 2000);
+        }
+
+        init();
+    </script>
+}

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>@(ViewData["Title"] ?? "WatchWith")</title>
+    <link rel="stylesheet" href="/css/app.css" />
+    <!-- CryptoJS loaded in head so it is ready before any page script runs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    @RenderBody()
+    <!-- SignalR -->
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.0/dist/browser/signalr.min.js" crossorigin="anonymous"></script>
+    <script>
+        if (typeof signalR === 'undefined') {
+            var s = document.createElement('script');
+            s.src = 'https://unpkg.com/@@microsoft/signalr@8.0.0/dist/browser/signalr.min.js';
+            document.head.appendChild(s);
+        }
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

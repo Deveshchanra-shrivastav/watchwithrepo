@@ -1,0 +1,798 @@
+@{ ViewData["Title"] = ViewBag.RoomName; }
+<div class="room-wrap">
+  <header class="room-nav">
+    <a href="/Home/Dashboard" class="logo"><span class="logo-dot"></span>WatchWith</a>
+    <div class="room-meta">
+      <span class="room-title">@ViewBag.RoomName</span>
+      <span class="room-code-pill">@ViewBag.RoomCode</span>
+      <span class="e2e-badge">🔒 E2E</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;position:relative;">
+      <div id="connStatus" class="conn-status connecting">Connecting...</div>
+      <div id="membersList" class="members-row"></div>
+      <button class="btn-invite" onclick="copyInvite()">Copy invite</button>
+      <div id="copyToast" class="copy-toast">Copied!</div>
+    </div>
+  </header>
+
+  <!-- TAB BAR -->
+  <div class="room-tabs">
+    <button class="rtab active" id="tab-video" onclick="showTab('video')">▶ Video</button>
+    <button class="rtab" id="tab-browser" onclick="showTab('browser')">🌐 Browser</button>
+  </div>
+
+  <div class="room-body">
+    <!-- ══ VIDEO PANEL ══ -->
+    <div class="player-side" id="videoPanel">
+      <div class="player-wrap" id="playerWrap">
+        <div class="player-empty" id="playerEmpty">
+          <div style="font-size:48px;opacity:.3">▶</div>
+          <p>No video yet</p>
+          <button class="btn-primary" onclick="openVideoModal()">+ Add a video</button>
+        </div>
+        <div id="ytPlayerEl" style="display:none;width:100%;height:100%;"></div>
+        <video id="mp4Player" style="display:none;width:100%;height:100%;background:#000;" playsinline controls></video>
+      </div>
+
+      <div class="controls-bar" id="controlsBar" style="display:none;">
+        <div class="progress-row">
+          <span id="tCurrent" class="t-label">0:00</span>
+          <div class="progress-track" id="progressTrack" onclick="onSeekClick(event)">
+            <div class="progress-fill" id="progressFill"></div>
+            <div class="progress-thumb" id="progressThumb"></div>
+          </div>
+          <span id="tTotal" class="t-label">0:00</span>
+        </div>
+        <div class="ctrl-row">
+          <button class="cbtn" onclick="rewind(10)">⏪ 10s</button>
+          <button class="cbtn play-cbtn" id="playBtn" onclick="togglePlay()">▶</button>
+          <button class="cbtn" onclick="forward(10)">10s ⏩</button>
+          <span style="flex:1"></span>
+          <span style="color:rgba(255,255,255,.6);font-size:12px;">Vol</span>
+          <input type="range" id="vol" min="0" max="100" value="80" style="width:70px;" oninput="setVol(this.value)"/>
+          <button class="cbtn add-btn" onclick="openVideoModal()">+ Video</button>
+        </div>
+      </div>
+
+      <!-- VOICE BAR -->
+      <div class="voice-bar">
+        <div id="voiceMembers" class="voice-members"></div>
+        <button class="voice-btn muted" id="micBtn" onclick="toggleMic()">
+          <span id="micIcon">🎙️</span> <span id="micLabel">Unmute</span>
+        </button>
+        <span style="font-size:11px;color:rgba(255,255,255,.5);margin-left:6px;" id="voiceHint">Click to speak</span>
+      </div>
+
+      <div class="sync-toast-bar" id="syncBar" style="display:none;"><span id="syncBarText"></span></div>
+    </div>
+
+    <!-- ══ BROWSER PANEL ══ -->
+    <div class="browser-panel" id="browserPanel" style="display:none;">
+      <div class="browser-bar">
+        <button class="cbtn" onclick="browserBack()" style="padding:0 10px;">←</button>
+        <button class="cbtn" onclick="browserForward()" style="padding:0 10px;">→</button>
+        <input id="browserUrl" type="text" class="browser-url-input" placeholder="Search or enter URL..."
+               onkeydown="if(event.key==='Enter')browserGo(this.value)" value="https://www.google.com"/>
+        <button class="cbtn" style="padding:0 12px;" onclick="browserGo(document.getElementById('browserUrl').value)">Go</button>
+        <button class="cbtn" style="padding:0 10px;background:rgba(200,0,0,.3);" onclick="closeBrowser()">✕</button>
+      </div>
+      <div style="background:#fff;flex:1;position:relative;">
+        <iframe id="browserFrame" src="about:blank"
+                style="width:100%;height:100%;border:none;"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                onload="onFrameLoad()"></iframe>
+        <div id="browserOverlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;color:#fff;font-size:14px;flex-direction:column;gap:8px;">
+          <div style="font-size:32px;">🌐</div>
+          <div>Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ CHAT PANEL ══ -->
+    <div class="chat-panel">
+      <div class="chat-head">
+        <span>Room chat</span>
+        <span id="onlineCount" class="online-pill">0 online</span>
+      </div>
+      <div class="msgs" id="msgs"></div>
+      <div id="typingEl" class="typing-hint" style="display:none;"></div>
+      <div class="emoji-strip">
+        <span onclick="addEmoji('❤️')">❤️</span><span onclick="addEmoji('😂')">😂</span>
+        <span onclick="addEmoji('😍')">😍</span><span onclick="addEmoji('😭')">😭</span>
+        <span onclick="addEmoji('🔥')">🔥</span><span onclick="addEmoji('🍿')">🍿</span>
+        <span onclick="addEmoji('🎬')">🎬</span><span onclick="addEmoji('👏')">👏</span>
+      </div>
+      <div class="chat-input-wrap">
+        <input id="msgIn" type="text" placeholder="Message (encrypted)..."
+               onkeydown="onMsgKey(event)" oninput="onTyping()"/>
+        <button class="send-btn" onclick="sendMessage()">➤</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VIDEO MODAL -->
+<div id="vModal" class="modal-bg" style="display:none;" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-hdr"><span>Add a video</span><button onclick="closeModal()" class="modal-x">✕</button></div>
+    <div class="modal-tabs">
+      <button class="mtab active" onclick="switchTab('yt',this)">YouTube</button>
+      <button class="mtab" onclick="switchTab('url',this)">Direct URL</button>
+      <button class="mtab" onclick="switchTab('up',this)">Upload</button>
+    </div>
+    <div id="tab-yt">
+      <input type="text" id="ytInput" placeholder="https://www.youtube.com/watch?v=..." class="modal-input"/>
+      <button class="btn-primary full" onclick="addYT()">Add YouTube video</button>
+    </div>
+    <div id="tab-url" style="display:none;">
+      <input type="text" id="urlInput" placeholder="https://example.com/video.mp4" class="modal-input"/>
+      <button class="btn-primary full" onclick="addURL()">Add video</button>
+    </div>
+    <div id="tab-up" style="display:none;">
+      <div class="upload-drop" id="uploadDrop" onclick="document.getElementById('fileIn').click()">
+        <div style="font-size:28px;margin-bottom:8px;">⬆</div>
+        <p id="uploadDropText">Click to choose a video file</p>
+        <small>MP4, MOV, AVI, WEBM · up to 500 MB</small>
+      </div>
+      <div id="uploadProgressWrap" style="display:none;margin-top:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px;">
+          <span id="uploadFileName"></span><span id="uploadPct">0%</span>
+        </div>
+        <div style="height:6px;background:var(--border);border-radius:3px;">
+          <div id="uploadBar" style="height:100%;width:0%;background:#7F77DD;border-radius:3px;transition:width .2s;"></div>
+        </div>
+        <div id="uploadStatus" style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center;"></div>
+      </div>
+      <input type="file" id="fileIn" accept="video/*" style="display:none;" onchange="addFile(event)"/>
+    </div>
+  </div>
+</div>
+
+<style>
+.conn-status{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500;}
+.conn-status.connecting{background:#FAEEDA;color:#854F0B;}
+.conn-status.connected{background:#EAF3DE;color:#3B6D11;}
+.conn-status.failed{background:#FCEBEB;color:#A32D2D;}
+.room-tabs{display:flex;background:#111;border-bottom:.5px solid rgba(255,255,255,.1);flex-shrink:0;}
+.rtab{padding:10px 20px;background:transparent;border:none;color:rgba(255,255,255,.5);font-size:13px;cursor:pointer;transition:all .15s;}
+.rtab.active{color:#fff;border-bottom:2px solid #7F77DD;}
+.voice-bar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#0d0d0d;border-top:.5px solid rgba(255,255,255,.08);}
+.voice-btn{padding:7px 14px;border-radius:20px;border:.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-size:13px;cursor:pointer;transition:all .2s;}
+.voice-btn.speaking{background:#1D9E75;border-color:#1D9E75;}
+.voice-btn.muted{background:rgba(255,255,255,.08);}
+.voice-members{display:flex;gap:6px;flex:1;}
+.voice-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;border:2px solid transparent;transition:border-color .2s;}
+.voice-av.speaking{border-color:#1D9E75;box-shadow:0 0 0 2px rgba(29,158,117,.3);}
+.browser-panel{flex:1;display:flex;flex-direction:column;}
+.browser-bar{display:flex;align-items:center;gap:6px;padding:8px 12px;background:#1a1a1a;border-bottom:.5px solid rgba(255,255,255,.1);}
+.browser-url-input{flex:1;padding:7px 12px;border:.5px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.08);color:#fff;font-size:13px;outline:none;}
+.browser-url-input:focus{border-color:#7F77DD;}
+</style>
+
+@section Scripts {
+<script>
+var ROOM_ID   = @ViewBag.RoomId;
+var USER_ID   = "@ViewBag.UserId";
+var USER_NAME = "@ViewBag.UserName";
+var ROOM_CODE = "@ViewBag.RoomCode";
+var USER_COLOR = "@ViewBag.UserColor";
+
+// ── E2E Encryption ────────────────────────────────────────────
+// var cryptoKey = null;
+// async function deriveKey(s) {
+//   var enc = new TextEncoder();
+//   var km  = await crypto.subtle.importKey("raw", enc.encode(s), "PBKDF2", false, ["deriveKey"]);
+//   return crypto.subtle.deriveKey(
+//     { name:"PBKDF2", salt:enc.encode("watchwith-salt"), iterations:100000, hash:"SHA-256" },
+//     km, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]);
+// }
+// async function encryptMsg(text) {
+//   var iv  = crypto.getRandomValues(new Uint8Array(12));
+//   var buf = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, cryptoKey, new TextEncoder().encode(text));
+//   return { encryptedText: btoa(String.fromCharCode.apply(null, new Uint8Array(buf))), iv: btoa(String.fromCharCode.apply(null, iv)) };
+// }
+// async function decryptMsg(e64, iv64) {
+//   try {
+//     var plain = await crypto.subtle.decrypt({ name:"AES-GCM", iv: Uint8Array.from(atob(iv64), c=>c.charCodeAt(0)) }, cryptoKey, Uint8Array.from(atob(e64), c=>c.charCodeAt(0)));
+//     return new TextDecoder().decode(plain);
+//   } catch { return "🔒 [encrypted]"; }
+        // }var cryptoKey = null;
+
+        function deriveKey(secret) {
+            // Key = SHA256 hash of the room code — pure JS, no crypto.subtle needed
+            cryptoKey = CryptoJS.SHA256(secret).toString();
+            return cryptoKey;
+        }
+
+        function encryptMsg(text) {
+            try {
+                var encrypted = CryptoJS.AES.encrypt(text, cryptoKey).toString();
+                return { encryptedText: encrypted, iv: "aes" };
+            } catch (e) {
+                return { encryptedText: btoa(unescape(encodeURIComponent(text))), iv: "plain" };
+            }
+        }
+
+        function decryptMsg(encText, iv) {
+            try {
+                if (iv === "plain") return decodeURIComponent(escape(atob(encText)));
+                var bytes = CryptoJS.AES.decrypt(encText, cryptoKey);
+                return bytes.toString(CryptoJS.enc.Utf8) || "🔒 [message]";
+            } catch (e) {
+                try { return decodeURIComponent(escape(atob(encText))); } catch { return "🔒 [message]"; }
+            }
+        }
+
+// ── SignalR ───────────────────────────────────────────────────
+var conn = null, ytPlayer = null, ytReady = false;
+var syncing = false, duration = 0, typingTimer = null;
+var micMuted = true, localStream = null, peerConnections = {};
+var videoVolume = 80, isSomeonespeaking = false;
+
+function setStatus(s) {
+  var el = document.getElementById("connStatus");
+  el.className = "conn-status " + s;
+  el.textContent = s==="connected" ? "● Connected" : s==="connecting" ? "Connecting..." : "✕ Disconnected";
+}
+
+async function start() {
+  cryptoKey = deriveKey(ROOM_CODE);
+  setStatus("connecting");
+
+  conn = new signalR.HubConnectionBuilder()
+    .withUrl("/watchHub")
+    .withAutomaticReconnect([0,2000,5000,10000,30000])
+    .configureLogging(signalR.LogLevel.Warning)
+    .build();
+
+  conn.on("RoomState",      onRoomState);
+  conn.on("UserJoined",     function(m) { showSync(m.name + " joined"); });
+  conn.on("UserLeft",       function(n) { showSync(n + " left"); });
+  conn.on("MembersUpdated", renderMembers);
+  conn.on("PlaybackSync",   onPlaybackSync);
+  conn.on("NewRoomMessage", onNewMessage);
+  conn.on("VideoChanged",   onVideoChanged);
+  conn.on("UserTyping",     function(name, t) {
+    var el = document.getElementById("typingEl");
+    el.style.display = t ? "block" : "none";
+    el.textContent = name + " is typing...";
+  });
+  conn.on("VoiceStateChanged", onVoiceStateChanged);
+  conn.on("VoiceOffer",        onVoiceOffer);
+  conn.on("VoiceAnswer",       onVoiceAnswer);
+  conn.on("VoiceIceCandidate", onVoiceIce);
+  conn.on("BrowserNavigated",  onBrowserNavigated);
+  conn.on("BrowserOpened",     onBrowserOpened);
+  conn.on("BrowserClosed",     function(name) { showSync(name + " closed the browser"); });
+  conn.on("Error",             function(m) { console.warn("Hub:", m); });
+
+  conn.onreconnecting(function() { setStatus("connecting"); });
+  conn.onreconnected(function()  { setStatus("connected"); conn.invoke("JoinRoom", ROOM_ID); });
+  conn.onclose(function()        { setStatus("failed"); });
+
+  try {
+    await conn.start();
+    setStatus("connected");
+    await conn.invoke("JoinRoom", ROOM_ID);
+  } catch(err) {
+    setStatus("failed");
+    setTimeout(start, 6000);
+  }
+}
+
+async function safeInvoke(method) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  if (!conn || conn.state !== signalR.HubConnectionState.Connected) return;
+  try { await conn.invoke.apply(conn, [method].concat(args)); }
+  catch(e) { console.error(method, e); }
+}
+
+// ── Room state ────────────────────────────────────────────────
+async function onRoomState(state) {
+  renderMembers(state.members);
+  if (state.videoUrl) loadVideo(state.videoUrl, state.videoType, state.currentTime);
+  if (state.browserUrl && state.browserUrl !== "about:blank") {
+    showTab("browser");
+    loadFrame(state.browserUrl);
+  }
+  for (var i = 0; i < state.recentMessages.length; i++) await renderMessage(state.recentMessages[i]);
+}
+
+// ── Members ───────────────────────────────────────────────────
+var membersData = [];
+function renderMembers(members) {
+            if (!members || !members.length) return;
+            membersData = members;
+
+            // Normalize — handle both camelCase (JS) and PascalCase (C# JSON)
+            members = members.map(function (m) {
+                return {
+                    userId: m.userId || m.UserId || "",
+                    name: m.name || m.Name || "User",
+                    avatar: m.avatar || m.Avatar || "?",
+                    color: m.color || m.Color || "#8b7cf8",
+                    isOnline: m.isOnline !== undefined ? m.isOnline : (m.IsOnline !== undefined ? m.IsOnline : false),
+                    isSpeaking: m.isSpeaking !== undefined ? m.isSpeaking : (m.IsSpeaking !== undefined ? m.IsSpeaking : false)
+                };
+            });
+            membersData = members;
+
+            var el  = document.getElementById("membersList");
+            var vel = document.getElementById("voiceMembers");
+            if (!el || !vel) return;
+
+            el.innerHTML = members.map(function(m) {
+                return '<div class="av" style="background:' + m.color + ';color:#fff;opacity:' + (m.isOnline ? 1 : 0.45) + ';border:2px solid ' + (m.isOnline ? "rgba(74,222,128,.5)" : "transparent") + ';" title="' + m.name + (m.isOnline ? " (online)" : "") + '">' + m.avatar + '</div>';
+            }).join("");
+
+            var onlineMembers = members.filter(function(m){ return m.isOnline; });
+            vel.innerHTML = onlineMembers.map(function(m) {
+                return '<div class="voice-av '+(m.isSpeaking?"speaking":"")+ '" id="vav_'+m.userId+'" style="background:'+m.color+';color:#fff;" title="'+m.name+'">'+m.avatar+'</div>';
+            }).join("");
+
+            document.getElementById("onlineCount").textContent = onlineMembers.length + " online";
+        }
+
+// ── Chat ──────────────────────────────────────────────────────
+async function onNewMessage(dto) { await renderMessage(dto); }
+
+async function renderMessage(dto) {
+  var area = document.getElementById("msgs");
+  var div  = document.createElement("div");
+  if (dto.type === "sync") {
+    div.className = "sync-pill";
+    div.innerHTML = "<span>" + dto.encryptedText + "</span>";
+  } else {
+    var text  = decryptMsg(dto.encryptedText, dto.iv);
+    var isOwn = dto.senderName === USER_NAME;
+    div.className = "msg-row " + (isOwn ? "out" : "in");
+    div.innerHTML =
+      (!isOwn ? '<div class="av sm" style="background:'+dto.senderColor+';color:#fff;">'+dto.senderAvatar+'</div>' : "") +
+      '<div class="bubble '+(isOwn?"bbl-out":"bbl-in")+'">' +
+        (!isOwn ? '<div class="msg-name">'+dto.senderName+'</div>' : "") +
+        '<div class="msg-txt">'+esc(text)+'</div>' +
+        '<div class="msg-time">'+dto.sentAt+(isOwn?' <span class="tick">✓✓</span>':'')+'</div>' +
+      '</div>';
+  }
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+async function sendMessage() {
+  var input = document.getElementById("msgIn");
+  var text  = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  var e = encryptMsg(text);
+  safeInvoke("SendRoomMessage", ROOM_ID, e.encryptedText, e.iv);
+  safeInvoke("RoomTyping", ROOM_ID, false);
+}
+
+function onMsgKey(e) { if (e.key === "Enter") sendMessage(); }
+function onTyping() {
+  safeInvoke("RoomTyping", ROOM_ID, true);
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(function(){ safeInvoke("RoomTyping", ROOM_ID, false); }, 2000);
+}
+function addEmoji(e) { document.getElementById("msgIn").value += e; }
+
+// ── Video ─────────────────────────────────────────────────────
+function loadVideo(url, type, startAt) {
+  document.getElementById("playerEmpty").style.display  = "none";
+  document.getElementById("controlsBar").style.display  = "block";
+  if (type === "youtube") {
+    document.getElementById("ytPlayerEl").style.display = "block";
+    document.getElementById("mp4Player").style.display  = "none";
+    initYT(url, startAt || 0);
+  } else {
+    document.getElementById("ytPlayerEl").style.display = "none";
+    var v = document.getElementById("mp4Player");
+    v.style.display = "block";
+    v.src = url;
+    v.currentTime = startAt || 0;
+    duration = 0;
+    attachMp4(v);
+    v.play().catch(function(){});
+  }
+}
+
+function initYT(url, startAt) {
+  var vid = extractYTId(url);
+  if (!vid) { alert("Invalid YouTube URL"); return; }
+  if (ytReady && ytPlayer) { ytPlayer.loadVideoById(vid, startAt); return; }
+  if (!window.YT) {
+    var s = document.createElement("script");
+    s.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(s);
+  }
+  window._pendingYT = { vid: vid, startAt: startAt };
+  window.onYouTubeIframeAPIReady = function() {
+    ytReady = true;
+    var p = window._pendingYT || {};
+    ytPlayer = new YT.Player("ytPlayerEl", {
+      videoId: p.vid,
+      playerVars: { autoplay:1, controls:0, rel:0, start:Math.floor(p.startAt||0) },
+      events: {
+        onReady: function() { duration = ytPlayer.getDuration(); startLoop(); },
+        onStateChange: function(e) {
+          if (syncing) return;
+          var t = ytPlayer.getCurrentTime();
+          if (e.data === YT.PlayerState.PLAYING) { document.getElementById("playBtn").textContent="⏸"; safeInvoke("Play",ROOM_ID,t); }
+          else if (e.data === YT.PlayerState.PAUSED) { document.getElementById("playBtn").textContent="▶"; safeInvoke("Pause",ROOM_ID,t); }
+        }
+      }
+    });
+  };
+}
+
+function attachMp4(v) {
+  v.onloadedmetadata = function() { duration = v.duration; startLoop(); };
+  v.onplay   = function() { if (!syncing) safeInvoke("Play",ROOM_ID,v.currentTime);  document.getElementById("playBtn").textContent="⏸"; };
+  v.onpause  = function() { if (!syncing) safeInvoke("Pause",ROOM_ID,v.currentTime); document.getElementById("playBtn").textContent="▶"; };
+  v.onseeked = function() { if (!syncing) safeInvoke("Seek",ROOM_ID,v.currentTime,"seek"); };
+}
+
+function onPlaybackSync(state) {
+  syncing = true;
+  seekTo(state.currentTime);
+  if (state.action==="play")  { playNow();  showSync(state.triggeredByName + " pressed play"); }
+  else if (state.action==="pause") { pauseNow(); showSync(state.triggeredByName + " paused"); }
+  else { showSync(state.triggeredByName + " " + state.action + "ed to " + fmt(state.currentTime)); }
+  setTimeout(function(){ syncing=false; }, 500);
+}
+
+function onVideoChanged(data) { loadVideo(data.url, data.type, 0); showSync(data.changedBy + " added a video"); }
+
+function togglePlay() {
+  if (ytPlayer && ytReady) ytPlayer.getPlayerState()===YT.PlayerState.PLAYING ? ytPlayer.pauseVideo() : ytPlayer.playVideo();
+  else { var v=document.getElementById("mp4Player"); v.paused ? v.play() : v.pause(); }
+}
+function playNow()  { if (ytPlayer && ytReady) ytPlayer.playVideo(); else document.getElementById("mp4Player").play().catch(function(){}); document.getElementById("playBtn").textContent="⏸"; }
+function pauseNow() { if (ytPlayer && ytReady) ytPlayer.pauseVideo(); else document.getElementById("mp4Player").pause(); document.getElementById("playBtn").textContent="▶"; }
+function seekTo(t)  { if (ytPlayer && ytReady) ytPlayer.seekTo(t,true); else { var v=document.getElementById("mp4Player"); if(v.src) v.currentTime=t; } }
+function getTime()  { return ytPlayer&&ytReady ? ytPlayer.getCurrentTime()||0 : document.getElementById("mp4Player").currentTime||0; }
+function rewind(s)  { var t=Math.max(0,getTime()-s); seekTo(t); safeInvoke("Seek",ROOM_ID,t,"rewind"); }
+function forward(s) { var t=getTime()+s; seekTo(t); safeInvoke("Seek",ROOM_ID,t,"seek"); }
+function setVol(v)  {
+  videoVolume = +v;
+  if (!isSomeonespeaking) applyVolume(videoVolume);
+}
+
+function applyVolume(v) {
+  if (ytPlayer && ytReady) ytPlayer.setVolume(v);
+  else document.getElementById("mp4Player").volume = v/100;
+}
+
+function onSeekClick(e) {
+  var r=document.getElementById("progressTrack").getBoundingClientRect();
+  var t=((e.clientX-r.left)/r.width)*duration;
+  seekTo(t); safeInvoke("Seek",ROOM_ID,t,"seek");
+}
+
+function startLoop() {
+  clearInterval(window._loopTimer);
+  window._loopTimer = setInterval(function() {
+    if (!duration) return;
+    var t=getTime(), pct=(t/duration)*100;
+    document.getElementById("progressFill").style.width = pct+"%";
+    document.getElementById("progressThumb").style.left = "calc("+pct+"% - 6px)";
+    document.getElementById("tCurrent").textContent = fmt(t);
+    document.getElementById("tTotal").textContent   = fmt(duration);
+  }, 500);
+}
+
+function fmt(s) {
+  s=Math.max(0,s||0);
+  var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);
+  return h>0 ? h+":"+String(m).padStart(2,"0")+":"+String(sec).padStart(2,"0") : m+":"+String(sec).padStart(2,"0");
+}
+
+function extractYTId(url) { var m=url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/); return m?m[1]:null; }
+
+// ── Video Modal ───────────────────────────────────────────────
+function openVideoModal() { document.getElementById("vModal").style.display="flex"; }
+function closeModal()     { document.getElementById("vModal").style.display="none"; }
+function switchTab(n,btn) {
+  document.querySelectorAll(".mtab").forEach(function(b){b.classList.remove("active");});
+  ["tab-yt","tab-url","tab-up"].forEach(function(id){document.getElementById(id).style.display="none";});
+  btn.classList.add("active");
+  document.getElementById("tab-"+n).style.display="block";
+}
+function addYT()  { var u=document.getElementById("ytInput").value.trim(); if(!u) return; loadVideo(u,"youtube",0); safeInvoke("SetVideo",ROOM_ID,u,"youtube"); closeModal(); }
+function addURL() { var u=document.getElementById("urlInput").value.trim(); if(!u) return; loadVideo(u,"url",0); safeInvoke("SetVideo",ROOM_ID,u,"url"); closeModal(); }
+
+        function addFile(e) {
+            var f = e.target.files[0];
+            if (!f) return;
+
+            // Step 1: Play locally immediately — instant, no upload needed
+            var local = URL.createObjectURL(f);
+            loadVideo(local, "url", 0);
+
+            // Step 2: Show upload progress UI
+            document.getElementById("uploadFileName").textContent = f.name;
+            document.getElementById("uploadProgressWrap").style.display = "block";
+            document.getElementById("uploadDropText").textContent = "Uploading...";
+            document.getElementById("uploadStatus").textContent = "Watching locally. Uploading so others can join...";
+            document.getElementById("uploadBar").style.width = "0%";
+            document.getElementById("uploadPct").textContent = "0%";
+
+            // Step 3: Upload to server using XHR — no timeout, stream to disk
+            var fd = new FormData();
+            fd.append("file", f);
+
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/Video/Upload", true);
+
+            // NO timeout — let it run as long as needed
+            xhr.timeout = 0;
+
+            xhr.upload.onprogress = function(ev) {
+                if (ev.lengthComputable) {
+                    var pct = Math.round((ev.loaded / ev.total) * 100);
+                    document.getElementById("uploadBar").style.width  = pct + "%";
+                    document.getElementById("uploadPct").textContent  = pct + "%";
+                    var mb = Math.round(ev.loaded / 1048576);
+                    var total = Math.round(ev.total / 1048576);
+                    document.getElementById("uploadStatus").textContent =
+                        "Uploading " + mb + " MB / " + total + " MB (" + pct + "%) — watching locally";
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    try {
+                        var res = JSON.parse(xhr.responseText);
+                        // Switch local player to server URL so seeking works for all users
+                        var v = document.getElementById("mp4Player");
+                        var currentT = v ? v.currentTime : 0;
+                        if (v && res.url) { v.src = res.url; v.currentTime = currentT; }
+                        // Broadcast server URL to all room members
+                        safeInvoke("SetVideo", ROOM_ID, res.url, "url");
+                        document.getElementById("uploadStatus").textContent = "Upload complete! Room synced.";
+                        document.getElementById("uploadDropText").textContent = "Click to choose a video file";
+                        document.getElementById("uploadBar").style.width = "100%";
+                        setTimeout(function() {
+                            document.getElementById("uploadProgressWrap").style.display = "none";
+                            document.getElementById("uploadBar").style.width = "0%";
+                            closeModal();
+                        }, 2500);
+                    } catch(ex) {
+                        document.getElementById("uploadStatus").textContent = "Upload done — playing locally only";
+                        closeModal();
+                    }
+                } else {
+                    document.getElementById("uploadStatus").textContent =
+                        "Upload failed (" + xhr.status + ") — playing locally only";
+                    console.error("Upload error:", xhr.status, xhr.responseText);
+                    setTimeout(function() { closeModal(); }, 3000);
+                }
+            };
+
+            xhr.onerror = function() {
+                document.getElementById("uploadStatus").textContent =
+                    "Connection error — video plays locally only";
+                console.error("XHR network error during upload");
+                setTimeout(function() { closeModal(); }, 3000);
+            };
+
+            xhr.ontimeout = function() {
+                document.getElementById("uploadStatus").textContent = "Upload timed out — playing locally";
+                setTimeout(function() { closeModal(); }, 3000);
+            };
+
+            xhr.send(fd);
+        }
+
+// ── Voice Chat (WebRTC) ───────────────────────────────────────
+async function toggleMic() {
+  micMuted = !micMuted;
+  var btn   = document.getElementById("micBtn");
+  var label = document.getElementById("micLabel");
+
+  if (!micMuted) {
+    // Unmute — get mic
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+      localStream.getAudioTracks()[0].enabled = true;
+      btn.className   = "voice-btn speaking";
+      label.textContent = "Mute";
+      document.getElementById("micIcon").textContent = "🔴";
+      document.getElementById("voiceHint").textContent = "You are speaking";
+
+      // Audio ducking — lower video volume when speaking
+      isSomeonespeaking = true;
+      applyVolume(Math.max(10, videoVolume * 0.25));
+
+      // Offer peer connection to each online member
+      membersData.filter(function(m){ return m.isOnline && m.userId !== USER_ID; }).forEach(function(m) {
+        createOffer(m.userId);
+      });
+
+      safeInvoke("SetVoiceState", ROOM_ID, false);
+    } catch(err) {
+      alert("Microphone access denied. Please allow mic access in your browser.");
+      micMuted = true;
+    }
+  } else {
+    // Mute
+    if (localStream) {
+      localStream.getTracks().forEach(function(t){ t.stop(); });
+      localStream = null;
+    }
+    btn.className = "voice-btn muted";
+    label.textContent = "Unmute";
+    document.getElementById("micIcon").textContent = "🎙️";
+    document.getElementById("voiceHint").textContent = "Click to speak";
+    isSomeonespeaking = false;
+    applyVolume(videoVolume);
+    safeInvoke("SetVoiceState", ROOM_ID, true);
+  }
+}
+
+function onVoiceStateChanged(state) {
+  // Another user changed their voice state
+  var vav = document.getElementById("vav_" + state.userId);
+  if (vav) {
+    if (!state.muted) {
+      vav.classList.add("speaking");
+      // Duck video volume when someone else speaks
+      isSomeonespeaking = true;
+      applyVolume(Math.max(10, videoVolume * 0.25));
+      showSync(state.userName + " is speaking 🎙️");
+    } else {
+      vav.classList.remove("speaking");
+      // Check if anyone else is still speaking
+      var anySpeaking = Array.from(document.querySelectorAll(".voice-av.speaking")).length > 0;
+      if (!anySpeaking && micMuted) {
+        isSomeonespeaking = false;
+        applyVolume(videoVolume);
+      }
+    }
+  }
+}
+
+// WebRTC signaling
+async function createOffer(targetUserId) {
+  var pc = new RTCPeerConnection({ iceServers: [{ urls:"stun:stun.l.google.com:19302" }] });
+  peerConnections[targetUserId] = pc;
+
+  if (localStream) localStream.getTracks().forEach(function(t){ pc.addTrack(t, localStream); });
+
+  pc.ontrack = function(e) { playRemoteAudio(targetUserId, e.streams[0]); };
+  pc.onicecandidate = function(e) {
+    if (e.candidate) safeInvoke("VoiceIceCandidate", targetUserId, JSON.stringify(e.candidate));
+  };
+
+  var offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  safeInvoke("VoiceOffer", ROOM_ID, targetUserId, JSON.stringify(offer));
+}
+
+async function onVoiceOffer(data) {
+  var pc = new RTCPeerConnection({ iceServers: [{ urls:"stun:stun.l.google.com:19302" }] });
+  peerConnections[data.fromUserId] = pc;
+
+  if (localStream) localStream.getTracks().forEach(function(t){ pc.addTrack(t, localStream); });
+  pc.ontrack = function(e) { playRemoteAudio(data.fromUserId, e.streams[0]); };
+  pc.onicecandidate = function(e) {
+    if (e.candidate) safeInvoke("VoiceIceCandidate", data.fromUserId, JSON.stringify(e.candidate));
+  };
+
+  await pc.setRemoteDescription(JSON.parse(data.offer));
+  var answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  safeInvoke("VoiceAnswer", data.fromUserId, JSON.stringify(answer));
+}
+
+async function onVoiceAnswer(data) {
+  var pc = peerConnections[data.fromUserId];
+  if (pc) await pc.setRemoteDescription(JSON.parse(data.answer));
+}
+
+async function onVoiceIce(data) {
+  var pc = peerConnections[data.fromUserId];
+  if (pc) { try { await pc.addIceCandidate(JSON.parse(data.candidate)); } catch(e){} }
+}
+
+function playRemoteAudio(userId, stream) {
+  var existing = document.getElementById("audio_" + userId);
+  if (existing) existing.remove();
+  var audio = document.createElement("audio");
+  audio.id       = "audio_" + userId;
+  audio.autoplay = true;
+  audio.srcObject = stream;
+  document.body.appendChild(audio);
+}
+
+// ── Co-Browser ────────────────────────────────────────────────
+function showTab(name) {
+  document.getElementById("tab-video").classList.toggle("active",   name==="video");
+  document.getElementById("tab-browser").classList.toggle("active", name==="browser");
+  document.getElementById("videoPanel").style.display   = name==="video"   ? "flex" : "none";
+  document.getElementById("browserPanel").style.display = name==="browser" ? "flex" : "none";
+}
+
+function loadFrame(url) {
+  document.getElementById("browserUrl").value = url;
+  document.getElementById("browserFrame").src = url;
+}
+
+function browserGo(rawUrl) {
+  var url = rawUrl.trim();
+  if (!url) return;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    // Treat as Google search
+    url = "https://www.google.com/search?q=" + encodeURIComponent(url) + "&igu=1";
+  }
+  loadFrame(url);
+  safeInvoke("BrowserNavigate", ROOM_ID, url);
+}
+
+function browserBack()    { document.getElementById("browserFrame").contentWindow.history.back(); }
+function browserForward() { document.getElementById("browserFrame").contentWindow.history.forward(); }
+
+function onFrameLoad() {
+  try {
+    var url = document.getElementById("browserFrame").contentWindow.location.href;
+    if (url && url !== "about:blank") {
+      document.getElementById("browserUrl").value = url;
+      safeInvoke("BrowserNavigate", ROOM_ID, url);
+    }
+  } catch(e) {} // cross-origin restriction
+}
+
+function openBrowser() {
+  showTab("browser");
+  var url = "https://www.google.com";
+  loadFrame(url);
+  safeInvoke("OpenBrowser", ROOM_ID, url);
+}
+
+function closeBrowser() {
+  showTab("video");
+  document.getElementById("browserFrame").src = "about:blank";
+  safeInvoke("CloseBrowser", ROOM_ID);
+}
+
+function onBrowserNavigated(data) {
+  if (data.navigatedBy !== USER_NAME) {
+    loadFrame(data.url);
+    showSync(data.navigatedBy + " navigated to " + data.url);
+  }
+}
+
+function onBrowserOpened(data) {
+  showTab("browser");
+  loadFrame(data.url);
+  showSync(data.openedBy + " opened the browser");
+}
+
+// ── Sync toast ────────────────────────────────────────────────
+function showSync(text) {
+  var bar = document.getElementById("syncBar");
+  document.getElementById("syncBarText").textContent = text;
+  bar.style.display = "block";
+  clearTimeout(bar._t);
+  bar._t = setTimeout(function(){ bar.style.display="none"; }, 3000);
+}
+
+function copyInvite() {
+  navigator.clipboard.writeText(window.location.origin + "/Room/Watch/" + ROOM_CODE);
+  var t = document.getElementById("copyToast");
+  t.style.opacity = "1";
+  setTimeout(function(){ t.style.opacity="0"; }, 2000);
+}
+        function waitAndStart() {
+            if (typeof CryptoJS === "undefined") {
+                setTimeout(waitAndStart, 100);
+                return;
+            }
+            start();
+        }
+        document.addEventListener("DOMContentLoaded", waitAndStart);
+    </script>
+}
+

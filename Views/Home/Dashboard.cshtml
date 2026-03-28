@@ -1,0 +1,111 @@
+@{ ViewData["Title"] = "Dashboard"; var user = ViewBag.User as WatchWith.Models.AppUser; var rooms = ViewBag.Rooms as List<WatchWith.Models.Room>; }
+<div class="dashboard">
+  <nav class="nav">
+    <div class="logo"><span class="logo-dot"></span>Popkorn</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="/Chat" class="btn-ghost-sm">💬 Messages</a>
+      <div class="av" style="background:@user?.AvatarColor;color:#fff;">@user?.AvatarInitials</div>
+      <span style="font-size:14px;color:var(--text2);">@user?.DisplayName</span>
+      <form method="post" action="/Account/Logout" style="margin:0;">
+        <button type="submit" class="btn-ghost-sm">Log out</button>
+      </form>
+    </div>
+  </nav>
+
+  @if (TempData["Error"] != null) {
+    <div class="alert-error" style="max-width:960px;margin:16px auto;">@TempData["Error"]</div>
+  }
+
+  <div class="dash-body">
+
+    <!-- Quick actions row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:28px;">
+
+      <!-- Create Room -->
+      <div class="action-card" style="border-top:2px solid var(--purple);">
+        <div class="action-title">🎬 Create a room</div>
+        <form method="post" action="/Home/CreateRoom">
+          <input type="text" name="roomName" placeholder="Room name (e.g. Movie Night)" />
+          <button type="submit" class="btn-primary full">Create room →</button>
+        </form>
+      </div>
+
+      <!-- Join Room -->
+      <div class="action-card" style="border-top:2px solid var(--teal);">
+        <div class="action-title">🔗 Join a room</div>
+        <form method="post" action="/Home/JoinRoom">
+          <input type="text" name="roomCode" placeholder="Room code (e.g. AB3X9Z)" maxlength="6" style="text-transform:uppercase"/>
+          <button type="submit" class="btn-primary full" style="background:var(--gradient2);">Join room →</button>
+        </form>
+      </div>
+
+      <!-- Start Chat — no room needed -->
+      <div class="action-card" style="border-top:2px solid var(--pink);">
+        <div class="action-title">💬 Start a chat</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">Message anyone directly — no room needed</p>
+        <input type="text" id="quickSearch" placeholder="Search by name or email..."
+               oninput="quickSearchUsers(this.value)"
+               style="width:100%;padding:10px 12px;border:.5px solid var(--border2);border-radius:var(--r);font-size:13px;background:var(--bg2);color:var(--text);outline:none;margin-bottom:8px;"/>
+        <div id="quickResults" style="max-height:160px;overflow-y:auto;"></div>
+        <a href="/Chat" class="btn-primary full" style="background:linear-gradient(135deg,#f472b6,#8b7cf8);display:block;text-align:center;margin-top:6px;">Open all chats →</a>
+      </div>
+
+    </div>
+
+    <!-- Rooms list -->
+    <div class="section-title">Your rooms</div>
+    @if (rooms == null || !rooms.Any()) {
+      <div class="empty-state">
+        <div class="empty-icon">🎬</div>
+        <div>No rooms yet — create one above or join with a code!</div>
+      </div>
+    } else {
+      <div class="rooms-grid">
+        @foreach (var room in rooms) {
+          <a asp-controller="Room" asp-action="Watch" asp-route-code="@room.Code" class="room-card">
+            <div class="room-card-icon">▶</div>
+            <div style="flex:1;">
+              <div class="room-card-name">@room.Name</div>
+              <div class="room-card-meta">Code: <strong>@room.Code</strong> · @room.MemberCount member(s)</div>
+            </div>
+            @if (room.OnlineCount > 0) {
+              <span class="badge-green"><span style="width:5px;height:5px;border-radius:50%;background:#3B6D11;display:inline-block;margin-right:4px;"></span>@room.OnlineCount live</span>
+            } else {
+              <span class="badge-gray">idle</span>
+            }
+          </a>
+        }
+      </div>
+    }
+
+  </div>
+</div>
+
+@section Scripts {
+<script>
+async function quickSearchUsers(q) {
+  var resultsEl = document.getElementById("quickResults");
+  if (!q || q.length < 2) { resultsEl.innerHTML = ""; return; }
+  try {
+    var res   = await fetch("/Chat/Search?q=" + encodeURIComponent(q));
+    var users = await res.json();
+    if (!users.length) {
+      resultsEl.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px;">No users found</div>';
+      return;
+    }
+    resultsEl.innerHTML = users.map(function(u) {
+      return '<a href="/Chat/' + u.id + '" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;text-decoration:none;color:var(--text);transition:background .15s;" ' +
+             'onmouseover="this.style.background=\'var(--surface3)\'" onmouseout="this.style.background=\'transparent\'">' +
+        '<div style="width:32px;height:32px;border-radius:50%;background:' + u.avatarColor + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">' + u.avatarInitials + '</div>' +
+        '<div>' +
+          '<div style="font-size:13px;font-weight:600;">' + u.displayName + '</div>' +
+          '<div style="font-size:11px;color:var(--text2);">Click to chat</div>' +
+        '</div>' +
+      '</a>';
+    }).join("");
+  } catch(e) {
+    resultsEl.innerHTML = '<div style="font-size:12px;color:var(--red);padding:8px;">Search failed</div>';
+  }
+}
+</script>
+}

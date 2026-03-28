@@ -1,0 +1,137 @@
+@{ ViewData["Title"] = "Messages"; var me = ViewBag.User as WatchWith.Models.AppUser; var chats = ViewBag.Chats as List<WatchWith.Models.ChatListItem>; }
+<div class="chat-app">
+  <div class="chat-sidebar">
+
+    <!-- Header -->
+    <div class="chat-sidebar-head">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="av" style="background:@me?.AvatarColor;color:#fff;">@me?.AvatarInitials</div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text);">@me?.DisplayName</div>
+          <div style="font-size:11px;color:var(--green);">● Online</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <a href="/Home/Dashboard" class="icon-btn" title="Back to Dashboard">🏠</a>
+      </div>
+    </div>
+
+    <!-- Search bar — always visible -->
+    <div style="padding:10px 12px;border-bottom:.5px solid var(--border);background:var(--bg2);">
+      <div style="position:relative;">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:14px;">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search users to chat..."
+               oninput="searchUsers(this.value)"
+               style="width:100%;padding:9px 12px 9px 32px;border:.5px solid var(--border2);border-radius:20px;font-size:13px;background:var(--surface);color:var(--text);outline:none;"/>
+      </div>
+      <div id="searchResults" style="margin-top:6px;max-height:200px;overflow-y:auto;"></div>
+    </div>
+
+    <!-- Chat list -->
+    <div class="chat-list" id="chatList">
+      @if (chats == null || !chats.Any()) {
+        <div style="padding:32px 20px;text-align:center;">
+          <div style="font-size:36px;margin-bottom:12px;">💬</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;">No messages yet</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6;">Search for a user above<br/>to start a conversation</div>
+        </div>
+      } else {
+        <div style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;">Recent chats</div>
+        @foreach (var c in chats) {
+          <a href="/Chat/@c.Id" class="chat-list-item" id="ci_@c.Id">
+            <div style="position:relative;flex-shrink:0;">
+              <div class="av lg" style="background:@c.AvatarColor;color:#fff;">@c.AvatarInitials</div>
+              <div class="online-dot" id="od_@c.Id" style="display:none;"></div>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:14px;font-weight:600;color:var(--text);">@c.DisplayName</span>
+                <span style="font-size:10px;color:var(--text2);">@(c.LastMsgAt?.ToString("HH:mm") ?? "")</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;">
+                <span id="lm_@c.Id" style="font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px;">🔒 encrypted message</span>
+                @if (c.UnreadCount > 0) {
+                  <span class="unread-badge" id="ub_@c.Id">@c.UnreadCount</span>
+                }
+              </div>
+            </div>
+          </a>
+        }
+      }
+    </div>
+
+  </div>
+
+  <!-- Empty state right panel -->
+  <div class="chat-main-empty" id="chatMainEmpty">
+    <div style="text-align:center;">
+      <div style="font-size:64px;margin-bottom:16px;opacity:.3;">💬</div>
+      <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px;">Popkorn Chat</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">Select a conversation or search for someone new</div>
+      <div style="font-size:11px;color:var(--text2);background:rgba(45,212,191,.1);border:.5px solid rgba(45,212,191,.2);padding:8px 16px;border-radius:20px;display:inline-block;">🔒 All messages are end-to-end encrypted</div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+<script>
+var ME_ID = "@me?.Id";
+var conn  = null;
+
+async function startHub() {
+  conn = new signalR.HubConnectionBuilder()
+    .withUrl("/watchHub")
+    .withAutomaticReconnect()
+    .build();
+  conn.on("NewDirectMessage", onNewDirectMessage);
+  conn.on("ContactTyping",    function(){});
+  try {
+    await conn.start();
+    await conn.invoke("JoinUserGroup");
+  } catch(e) { setTimeout(startHub, 4000); }
+}
+
+function onNewDirectMessage(dto) {
+  var contactId = dto.isOwn ? dto.receiverId : dto.senderId;
+  var lm = document.getElementById("lm_" + contactId);
+  var ub = document.getElementById("ub_" + contactId);
+  if (lm) lm.textContent = "🔒 new message";
+  // Move chat to top
+  var item = document.getElementById("ci_" + contactId);
+  if (item) {
+    var list = document.getElementById("chatList");
+    list.insertBefore(item, list.children[1]); // after the label
+  }
+  // If contact not in list yet — reload page to show them
+  if (!lm) setTimeout(function(){ location.reload(); }, 1000);
+}
+
+async function searchUsers(q) {
+  var el = document.getElementById("searchResults");
+  if (!q || q.length < 2) { el.innerHTML = ""; return; }
+  try {
+    var res   = await fetch("/Chat/Search?q=" + encodeURIComponent(q));
+    var users = await res.json();
+    if (!users.length) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:10px 6px;">No users found for "' + q + '"</div>';
+      return;
+    }
+    el.innerHTML = users.map(function(u) {
+      return '<a href="/Chat/' + u.id + '" style="display:flex;align-items:center;gap:10px;padding:10px 8px;border-radius:10px;cursor:pointer;text-decoration:none;color:var(--text);transition:background .15s;" ' +
+             'onmouseover="this.style.background=\'var(--surface3)\'" onmouseout="this.style.background=\'transparent\'">' +
+        '<div style="width:36px;height:36px;border-radius:50%;background:' + u.avatarColor + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">' + u.avatarInitials + '</div>' +
+        '<div style="flex:1;">' +
+          '<div style="font-size:13px;font-weight:600;">' + u.displayName + '</div>' +
+          '<div style="font-size:11px;color:var(--text2);">Tap to start chatting</div>' +
+        '</div>' +
+        '<div style="font-size:18px;opacity:.4;">→</div>' +
+      '</a>';
+    }).join("");
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--red);padding:8px;">Search error</div>';
+  }
+}
+
+startHub();
+</script>
+}
