@@ -1,1 +1,27 @@
+<<<<<<< HEAD
 ﻿
+=======
+﻿# Visual Studio cache/option directory
+.vs/
+
+# Build results
+bin/
+obj/
+
+# User-specific files
+*.user
+*.rsuser
+
+# ReSharper
+.idea/
+
+# Local environment files
+.env
+.env.local
+
+# SSH keys (don't commit these!)
+githubey
+githubey.pub
+watchwithrepo
+watchwithrepo.pub
+>>>>>>> bb0842a (Initial commit: WatchWith V2 .NET Core application)
